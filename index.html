@@ -94,9 +94,9 @@
   </div>
 
   <script>
-    // 1. REPLACE WITH YOUR GOOGLE SHEET ID
+    // Embedded Sheet ID
     const SHEET_ID = '19PY--63-6NK9hURQepUrEyVUxVkHy-bcdspogmycI6I';
-    
+
     // Live Clock
     function updateClock() {
       const now = new Date();
@@ -105,72 +105,69 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Robust CSV parser
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      return lines.map(line => {
-        const row = [];
-        let inQuotes = false;
-        let cell = '';
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          if (char === '"') inQuotes = !inQuotes;
-          else if (char === ',' && !inQuotes) { row.push(cell.trim().replace(/^"|"$/g, '')); cell = ''; }
-          else cell += char;
-        }
-        row.push(cell.trim().replace(/^"|"$/g, ''));
-        return row;
+    // JSONP fetcher (Bypasses browser CORS blocks 100%)
+    function fetchSheetJSONP(tabName) {
+      return new Promise((resolve) => {
+        const callbackName = 'gviz_cb_' + Math.random().toString(36).substring(2, 9);
+        const script = document.createElement('script');
+
+        window[callbackName] = function(json) {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          try {
+            const rows = json.table.rows.map(row => 
+              row.c.map(cell => (cell && cell.v !== null && cell.v !== undefined) ? (cell.f || cell.v.toString()) : '')
+            );
+            resolve(rows);
+          } catch (e) {
+            console.error('Error parsing Google table:', e);
+            resolve(null);
+          }
+        };
+
+        script.onerror = function() {
+          delete window[callbackName];
+          if (document.body.contains(script)) document.body.removeChild(script);
+          resolve(null);
+        };
+
+        script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(tabName)}&tqx=responseHandler:${callbackName}`;
+        document.body.appendChild(script);
       });
-    }
-
-    // Fallback Mock Data (displays if Sheet ID is not yet connected)
-    const mockQueue = [
-      ["8:30 AM", "Kishan L.", "2021 Toyota RAV4", "Winter Swap", "Rack H3", "Lug nut lock key in armrest"],
-      ["9:15 AM", "Sarah Jenkins", "2019 Honda Civic", "Mount & Balance", "None", "Cust supplied rims"],
-      ["10:00 AM", "Mike Torres", "2020 Ram 1500", "Winter Swap", "Rack B12", "Torque to 130 lb-ft, check RF bead"],
-      ["10:45 AM", "Aaron Patel", "2022 Hyundai Tucson", "Flat Repair", "None", "Nail in RR tread block"]
-    ];
-
-    const mockInventory = [
-      ["225/65R17", "Michelin X-Ice Snow", "Brand New (11/32\")", "RAV4, CR-V, CX-5, Rogue", "$840 Mounted", "Ready to bolt on"],
-      ["275/55R20", "Bridgestone Blizzak DM-V2", "Used - 9/32\" (85%)", "F-150, Ram 1500, Tahoe, Yukon", "$750 Installed", "No camber wear, mint"],
-      ["205/55R16", "Continental VikingContact 7", "Brand New (10/32\")", "Civic, Corolla, Golf, Elantra", "$680 Mounted", "Set of 4 on shelf"]
-    ];
-
-    async function fetchSheetData(tabName) {
-      if (SHEET_ID === '19PY--63-6NK9hURQepUrEyVUxVkHy-bcdspogmycI6I') return null;
-      try {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Network error');
-        const text = await res.text();
-        const data = parseCSV(text);
-        return data.slice(1); // skip headers
-      } catch (err) {
-        console.error('Fetch error:', err);
-        return null;
-      }
     }
 
     function renderQueue(rows) {
       const tbody = document.getElementById('queueBody');
       tbody.innerHTML = '';
+      if (!rows || rows.length === 0) {
+        document.getElementById('queueCount').textContent = '0 Jobs';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No appointments queued</td></tr>';
+        return;
+      }
+
       document.getElementById('queueCount').textContent = `${rows.length} Active`;
       
       rows.forEach(r => {
-        const [time, cust, veh, service, loc, notes] = r;
-        if (!time && !cust) return;
+        const time = r[0] || '--';
+        const cust = r[1] || '';
+        const veh = r[2] || 'Walk-In';
+        const service = r[3] || 'General';
+        const loc = r[4] || '';
+        const notes = r[5] || '-';
+
+        if (time === '--' && !cust && veh === 'Walk-In') return;
+
         const tr = document.createElement('tr');
-        const locBadge = (loc && loc.trim() !== '' && loc.toLowerCase() !== 'none') 
+        const locBadge = (loc && loc.trim() !== '' && loc.toLowerCase() !== 'none' && loc !== '?') 
           ? `<span class="storage-tag">${loc}</span>` 
           : `<span class="storage-none">Not Stored</span>`;
 
         tr.innerHTML = `
-          <td class="time-col">${time || '--'}</td>
-          <td class="vehicle-col">${veh || 'Walk-In'}<small>${cust || ''}</small></td>
-          <td><span class="service-badge">${service || 'General'}</span></td>
+          <td class="time-col">${time}</td>
+          <td class="vehicle-col">${veh}<small>${cust}</small></td>
+          <td><span class="service-badge">${service}</span></td>
           <td>${locBadge}</td>
-          <td class="notes-text">${notes || '-'}</td>
+          <td class="notes-text">${notes}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -179,32 +176,44 @@
     function renderInventory(rows) {
       const container = document.getElementById('inventoryBody');
       container.innerHTML = '';
+      if (!rows || rows.length === 0) {
+        document.getElementById('stockCount').textContent = '0 Sets';
+        return;
+      }
+
       document.getElementById('stockCount').textContent = `${rows.length} Sets Ready`;
 
       rows.forEach(r => {
-        const [size, brand, cond, fits, price, notes] = r;
+        const size = r[0] || '';
+        const brand = r[1] || '';
+        const cond = r[2] || 'Inspected';
+        const fits = r[3] || '';
+        const price = r[4] || 'Quote';
+        const notes = r[5] || '';
+
         if (!size) return;
+
         const card = document.createElement('div');
         card.className = 'inventory-card';
         card.innerHTML = `
           <div class="card-top">
             <div class="tire-size">${size}</div>
-            <div class="price-tag">${price || 'Quote'}</div>
+            <div class="price-tag">${price}</div>
           </div>
-          <div class="tire-model">${brand || ''}</div>
-          <div class="tire-condition">${cond || 'Inspected'}</div>
-          <div class="fitment-info"><strong>Fits:</strong> ${fits || 'Universal'} ${notes ? '• ' + notes : ''}</div>
+          <div class="tire-model">${brand}</div>
+          <div class="tire-condition">${cond}</div>
+          <div class="fitment-info"><strong>Fits:</strong> ${fits} ${notes ? '• ' + notes : ''}</div>
         `;
         container.appendChild(card);
       });
     }
 
     async function refreshDashboard() {
-      const queueData = await fetchSheetData('BayQueue');
-      const stockData = await fetchSheetData('SetsForSale');
+      const queueData = await fetchSheetJSONP('BayQueue');
+      const stockData = await fetchSheetJSONP('SetsForSale');
 
-      renderQueue(queueData || mockQueue);
-      renderInventory(stockData || mockInventory);
+      if (queueData) renderQueue(queueData);
+      if (stockData) renderInventory(stockData);
     }
 
     // Initial load + refresh every 30 seconds
@@ -213,4 +222,3 @@
   </script>
 </body>
 </html>
-qVjJxZmEOmCtAMJh4TBI+/UZLc2p566djZJehfFLnDM=
