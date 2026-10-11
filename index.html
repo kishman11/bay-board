@@ -12,8 +12,15 @@
     .brand-title { font-size: 26px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: #f8fafc; }
     .brand-title span { color: #f59e0b; }
     .header-right { display: flex; align-items: center; gap: 24px; }
-    .sync-status { font-size: 14px; font-weight: 600; color: #10b981; display: flex; align-items: center; gap: 8px; }
-    .sync-dot { width: 10px; height: 10px; background-color: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
+    
+    /* Live Sync Diagnostic Pill */
+    .sync-status { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px; }
+    .sync-ok { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .sync-error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .sync-ok .sync-dot { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+    .sync-error .sync-dot { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
     .clock { font-size: 30px; font-weight: 800; color: #ffffff; letter-spacing: 1px; }
 
     /* Main Grid: Left 38% (Queue), Right 62% (Inventory) */
@@ -23,7 +30,7 @@
     .panel-header h2 { font-size: 19px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; color: #94a3b8; }
     .panel-header .badge { background: #1e293b; color: #f59e0b; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
 
-    /* Compact Staging Queue (Left Panel) */
+    /* Staging Queue Table */
     .table-container { overflow-y: hidden; flex-grow: 1; position: relative; }
     table { width: 100%; border-collapse: collapse; text-align: left; }
     th { position: sticky; top: 0; background: #131b2e; color: #64748b; font-size: 12px; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #243049; z-index: 2; }
@@ -38,7 +45,7 @@
     .storage-none { color: #475569; font-weight: 600; font-size: 12px; }
     .notes-text { color: #f59e0b; font-weight: 600; font-size: 12px; line-height: 1.2; }
 
-    /* Big Hot In-Stock Inventory (Right Panel) */
+    /* Inventory Grid */
     .inventory-container { overflow-y: hidden; flex-grow: 1; position: relative; }
     .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .inventory-card { background: #182238; border: 1px solid #263554; border-radius: 8px; padding: 14px 16px; position: relative; border-left: 6px solid #10b981; }
@@ -56,7 +63,10 @@
   <header>
     <div class="brand-title">Tire Bay <span>Command</span></div>
     <div class="header-right">
-      <div class="sync-status"><div class="sync-dot"></div> Live Sheets Connected</div>
+      <div id="syncStatusPill" class="sync-status sync-ok">
+        <div class="sync-dot"></div>
+        <span id="syncStatusText">Connecting to Google Sheet...</span>
+      </div>
       <div class="clock" id="liveClock">--:-- --</div>
     </div>
   </header>
@@ -99,7 +109,6 @@
   <script>
     const SHEET_ID = '19PY--63-6NK9hURQepUrEyVUxVkHy-bcdspogmycI6I';
 
-    // Live Clock
     function updateClock() {
       const now = new Date();
       document.getElementById('liveClock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -107,30 +116,49 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // JSONP Data Fetcher
+    function setStatus(isOk, message) {
+      const pill = document.getElementById('syncStatusPill');
+      const text = document.getElementById('syncStatusText');
+      pill.className = isOk ? 'sync-status sync-ok' : 'sync-status sync-error';
+      text.textContent = message;
+    }
+
+    // JSONP Requester with Detailed Error Reporting
     function fetchSheetJSONP(tabName) {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const callbackName = 'gviz_cb_' + Math.random().toString(36).substring(2, 9);
         const script = document.createElement('script');
 
         window[callbackName] = function(json) {
           delete window[callbackName];
-          document.body.removeChild(script);
-          try {
-            const rows = json.table.rows.map(row => 
-              row.c.map(cell => (cell && cell.v !== null && cell.v !== undefined) ? (cell.f || cell.v.toString()) : '')
-            );
-            resolve(rows);
-          } catch (e) {
-            console.error('Error parsing table:', e);
-            resolve(null);
+          if (document.body.contains(script)) document.body.removeChild(script);
+
+          if (!json) {
+            reject(`No response from sheet tab '${tabName}'`);
+            return;
           }
+          if (json.status === 'error') {
+            const err = json.errors && json.errors[0] ? json.errors[0].message : 'Unknown Sheet Error';
+            reject(`Tab '${tabName}': ${err}`);
+            return;
+          }
+          if (!json.table || !json.table.rows) {
+            reject(`Tab '${tabName}' has no data rows`);
+            return;
+          }
+
+          // Convert rows
+          const rows = json.table.rows.map(row => {
+            if (!row || !row.c) return [];
+            return row.c.map(cell => (cell && cell.v !== null && cell.v !== undefined) ? (cell.f || cell.v.toString()) : '');
+          });
+          resolve(rows);
         };
 
         script.onerror = function() {
           delete window[callbackName];
           if (document.body.contains(script)) document.body.removeChild(script);
-          resolve(null);
+          reject(`Network error loading '${tabName}' - check Wi-Fi / Sharing`);
         };
 
         script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(tabName)}&tqx=responseHandler:${callbackName}`;
@@ -141,23 +169,22 @@
     function renderQueue(rows) {
       const tbody = document.getElementById('queueBody');
       tbody.innerHTML = '';
-      if (!rows || rows.length === 0) {
-        document.getElementById('queueCount').textContent = '0 Jobs';
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No appointments queued</td></tr>';
+      
+      const filtered = rows.filter(r => r.length > 0 && r.some(c => c && c.trim() !== ''));
+      document.getElementById('queueCount').textContent = `${filtered.length} Active`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No appointments queued in BayQueue</td></tr>';
         return;
       }
-
-      document.getElementById('queueCount').textContent = `${rows.length} Active`;
       
-      rows.forEach(r => {
+      filtered.forEach(r => {
         const time = r[0] || '--';
         const cust = r[1] || '';
         const veh = r[2] || 'Walk-In';
         const service = r[3] || 'General';
         const loc = r[4] || '';
         const notes = r[5] || '-';
-
-        if (time === '--' && !cust && veh === 'Walk-In') return;
 
         const tr = document.createElement('tr');
         const locBadge = (loc && loc.trim() !== '' && loc.toLowerCase() !== 'none' && loc !== '?') 
@@ -167,4 +194,98 @@
         tr.innerHTML = `
           <td class="time-col">${time}</td>
           <td class="vehicle-col">${veh}<small>${cust}</small></td>
-          <td>
+          <td><span class="service-badge">${service}</span></td>
+          <td>${locBadge}</td>
+          <td class="notes-text">${notes}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderInventory(rows) {
+      const container = document.getElementById('inventoryBody');
+      container.innerHTML = '';
+
+      const filtered = rows.filter(r => r[0] && r[0].trim() !== '');
+      document.getElementById('stockCount').textContent = `${filtered.length} Sets Ready`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div style="color:#64748b; padding:20px; grid-column:span 2;">No tire sets listed in SetsForSale</div>';
+        return;
+      }
+
+      filtered.forEach(r => {
+        const size = r[0] || '';
+        const brand = r[1] || '';
+        const cond = r[2] || 'Inspected';
+        const fits = r[3] || '';
+        const price = r[4] || 'Quote';
+        const notes = r[5] || '';
+
+        const card = document.createElement('div');
+        card.className = 'inventory-card';
+        card.innerHTML = `
+          <div class="card-top">
+            <div class="tire-size">${size}</div>
+            <div class="price-tag">${price}</div>
+          </div>
+          <div class="tire-model">${brand}</div>
+          <div class="tire-condition">${cond}</div>
+          <div class="fitment-info"><strong>Fits:</strong> ${fits} ${notes ? '• ' + notes : ''}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function setupAutoScroller(elementId, speed = 1) {
+      const el = document.getElementById(elementId);
+      let direction = 1;
+      let pauseUntil = 0;
+
+      function step() {
+        const now = Date.now();
+        if (now > pauseUntil) {
+          const maxScroll = el.scrollHeight - el.clientHeight;
+          if (maxScroll > 15) {
+            el.scrollTop += speed * direction;
+            if (el.scrollTop >= maxScroll) {
+              direction = -1;
+              pauseUntil = now + 4000;
+            } else if (el.scrollTop <= 0) {
+              direction = 1;
+              pauseUntil = now + 4000;
+            }
+          }
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    async function refreshDashboard() {
+      try {
+        const [queueRows, stockRows] = await Promise.all([
+          fetchSheetJSONP('BayQueue'),
+          fetchSheetJSONP('SetsForSale')
+        ]);
+
+        renderQueue(queueRows);
+        renderInventory(stockRows);
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setStatus(true, `Synced (${queueRows.length} Jobs, ${stockRows.length} Sets) @ ${timeStr}`);
+      } catch (err) {
+        console.error(err);
+        setStatus(false, err.toString());
+      }
+    }
+
+    refreshDashboard();
+    setInterval(refreshDashboard, 30000);
+
+    setupAutoScroller('queueScrollBox', 0.5);
+    setupAutoScroller('stockScrollBox', 0.6);
+  </script>
+</body>
+</html>
