@@ -5,49 +5,50 @@
   <title>Bay Command Center</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-    body { background-color: #0b0f19; color: #f1f5f9; padding: 20px; overflow: hidden; height: 100vh; }
+    body { background-color: #0b0f19; color: #f1f5f9; padding: 16px 20px; overflow: hidden; height: 100vh; }
     
     /* Top Header */
-    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 2px solid #1e293b; margin-bottom: 18px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 2px solid #1e293b; margin-bottom: 14px; }
     .brand-title { font-size: 26px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: #f8fafc; }
     .brand-title span { color: #f59e0b; }
     .header-right { display: flex; align-items: center; gap: 24px; }
     .sync-status { font-size: 14px; font-weight: 600; color: #10b981; display: flex; align-items: center; gap: 8px; }
     .sync-dot { width: 10px; height: 10px; background-color: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
-    .clock { font-size: 32px; font-weight: 800; color: #ffffff; letter-spacing: 1px; }
+    .clock { font-size: 30px; font-weight: 800; color: #ffffff; letter-spacing: 1px; }
 
-    /* Main Grid */
-    .dashboard-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; height: calc(100vh - 100px); }
-    .panel { background: #131b2e; border: 1px solid #1e293b; border-radius: 10px; padding: 18px; display: flex; flex-direction: column; overflow: hidden; }
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #243049; }
-    .panel-header h2 { font-size: 20px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; color: #94a3b8; }
+    /* Main Grid: Left 38% (Queue), Right 62% (Inventory) */
+    .dashboard-grid { display: grid; grid-template-columns: 38% 62%; gap: 18px; height: calc(100vh - 90px); }
+    .panel { background: #131b2e; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #243049; }
+    .panel-header h2 { font-size: 19px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; color: #94a3b8; }
     .panel-header .badge { background: #1e293b; color: #f59e0b; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
 
-    /* Staging Queue Table */
-    .table-container { overflow-y: auto; flex-grow: 1; }
+    /* Compact Staging Queue (Left Panel) */
+    .table-container { overflow-y: hidden; flex-grow: 1; position: relative; }
     table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { position: sticky; top: 0; background: #131b2e; color: #64748b; font-size: 13px; text-transform: uppercase; padding: 10px 8px; border-bottom: 2px solid #243049; }
-    td { padding: 12px 8px; border-bottom: 1px solid #1e293b; font-size: 15px; vertical-align: middle; }
+    th { position: sticky; top: 0; background: #131b2e; color: #64748b; font-size: 12px; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #243049; z-index: 2; }
+    td { padding: 10px 6px; border-bottom: 1px solid #1e293b; font-size: 14px; vertical-align: middle; }
     tr:nth-child(even) td { background-color: rgba(255, 255, 255, 0.015); }
 
-    .time-col { font-weight: 800; color: #cbd5e1; font-size: 16px; white-space: nowrap; }
-    .vehicle-col { font-weight: 700; color: #ffffff; font-size: 16px; }
-    .vehicle-col small { display: block; color: #94a3b8; font-size: 13px; font-weight: 500; }
-    .service-badge { display: inline-block; background: #1e3a5f; color: #38bdf8; font-weight: 700; font-size: 13px; padding: 4px 8px; border-radius: 4px; }
-    .storage-tag { display: inline-block; background: #b45309; color: #fffbeb; font-weight: 900; font-size: 15px; padding: 5px 10px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #f59e0b; }
-    .storage-none { color: #475569; font-weight: 600; font-size: 13px; }
-    .notes-text { color: #f59e0b; font-weight: 600; font-size: 13px; max-width: 220px; }
+    .time-col { font-weight: 800; color: #cbd5e1; font-size: 14px; white-space: nowrap; width: 68px; }
+    .vehicle-col { font-weight: 700; color: #ffffff; font-size: 14px; line-height: 1.2; }
+    .vehicle-col small { display: block; color: #94a3b8; font-size: 12px; font-weight: 500; }
+    .service-badge { display: inline-block; background: #1e3a5f; color: #38bdf8; font-weight: 700; font-size: 12px; padding: 3px 6px; border-radius: 4px; }
+    .storage-tag { display: inline-block; background: #b45309; color: #fffbeb; font-weight: 900; font-size: 13px; padding: 4px 8px; border-radius: 5px; border: 1px solid #f59e0b; white-space: nowrap; }
+    .storage-none { color: #475569; font-weight: 600; font-size: 12px; }
+    .notes-text { color: #f59e0b; font-weight: 600; font-size: 12px; line-height: 1.2; }
 
-    /* Inventory Cards */
-    .inventory-container { overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 12px; }
-    .inventory-card { background: #182238; border: 1px solid #263554; border-radius: 8px; padding: 14px; position: relative; border-left: 5px solid #10b981; }
-    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-    .tire-size { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; }
-    .price-tag { font-size: 20px; font-weight: 900; color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .tire-model { font-size: 16px; font-weight: 700; color: #cbd5e1; margin-bottom: 4px; }
+    /* Big Hot In-Stock Inventory (Right Panel) */
+    .inventory-container { overflow-y: hidden; flex-grow: 1; position: relative; }
+    .inventory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .inventory-card { background: #182238; border: 1px solid #263554; border-radius: 8px; padding: 14px 16px; position: relative; border-left: 6px solid #10b981; }
+    .card-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .tire-size { font-size: 26px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; }
+    .price-tag { font-size: 22px; font-weight: 900; color: #10b981; background: rgba(16, 185, 129, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .tire-model { font-size: 17px; font-weight: 800; color: #cbd5e1; margin-bottom: 4px; }
     .tire-condition { font-size: 13px; font-weight: 700; color: #f59e0b; text-transform: uppercase; margin-bottom: 8px; }
-    .fitment-info { font-size: 13px; color: #94a3b8; font-weight: 500; background: #0f172a; padding: 6px 10px; border-radius: 4px; }
-    .fitment-info strong { color: #cbd5e1; }
+    .fitment-info { font-size: 13px; color: #94a3b8; font-weight: 500; background: #0f172a; padding: 6px 10px; border-radius: 5px; line-height: 1.3; }
+    .fitment-info strong { color: #e2e8f0; }
   </style>
 </head>
 <body>
@@ -61,21 +62,21 @@
   </header>
 
   <div class="dashboard-grid">
-    <!-- Bay Schedule & Pre-Pull -->
+    <!-- Bay Schedule (Left 38%) -->
     <div class="panel">
       <div class="panel-header">
-        <h2>Today's Bay Staging & Service Queue</h2>
+        <h2>Today's Service Queue</h2>
         <span class="badge" id="queueCount">0 Jobs</span>
       </div>
-      <div class="table-container">
+      <div class="table-container" id="queueScrollBox">
         <table>
           <thead>
             <tr>
               <th>Time</th>
-              <th>Customer & Vehicle</th>
+              <th>Vehicle / Cust</th>
               <th>Service</th>
-              <th>Storage Bin</th>
-              <th>Technician Notes</th>
+              <th>Rack</th>
+              <th>Notes</th>
             </tr>
           </thead>
           <tbody id="queueBody"></tbody>
@@ -83,18 +84,19 @@
       </div>
     </div>
 
-    <!-- Ready To Mount Stock -->
+    <!-- Hot In-Stock Sets (Right 62% - 2 Columns) -->
     <div class="panel">
       <div class="panel-header">
         <h2>Hot In-Stock Sets (Ready To Sell)</h2>
-        <span class="badge" id="stockCount">0 Sets Available</span>
+        <span class="badge" id="stockCount">0 Sets Ready</span>
       </div>
-      <div class="inventory-container" id="inventoryBody"></div>
+      <div class="inventory-container" id="stockScrollBox">
+        <div class="inventory-grid" id="inventoryBody"></div>
+      </div>
     </div>
   </div>
 
   <script>
-    // Embedded Sheet ID
     const SHEET_ID = '19PY--63-6NK9hURQepUrEyVUxVkHy-bcdspogmycI6I';
 
     // Live Clock
@@ -105,7 +107,7 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // JSONP fetcher (Bypasses browser CORS blocks 100%)
+    // JSONP Data Fetcher
     function fetchSheetJSONP(tabName) {
       return new Promise((resolve) => {
         const callbackName = 'gviz_cb_' + Math.random().toString(36).substring(2, 9);
@@ -120,7 +122,7 @@
             );
             resolve(rows);
           } catch (e) {
-            console.error('Error parsing Google table:', e);
+            console.error('Error parsing table:', e);
             resolve(null);
           }
         };
@@ -165,60 +167,4 @@
         tr.innerHTML = `
           <td class="time-col">${time}</td>
           <td class="vehicle-col">${veh}<small>${cust}</small></td>
-          <td><span class="service-badge">${service}</span></td>
-          <td>${locBadge}</td>
-          <td class="notes-text">${notes}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function renderInventory(rows) {
-      const container = document.getElementById('inventoryBody');
-      container.innerHTML = '';
-      if (!rows || rows.length === 0) {
-        document.getElementById('stockCount').textContent = '0 Sets';
-        return;
-      }
-
-      document.getElementById('stockCount').textContent = `${rows.length} Sets Ready`;
-
-      rows.forEach(r => {
-        const size = r[0] || '';
-        const brand = r[1] || '';
-        const cond = r[2] || 'Inspected';
-        const fits = r[3] || '';
-        const price = r[4] || 'Quote';
-        const notes = r[5] || '';
-
-        if (!size) return;
-
-        const card = document.createElement('div');
-        card.className = 'inventory-card';
-        card.innerHTML = `
-          <div class="card-top">
-            <div class="tire-size">${size}</div>
-            <div class="price-tag">${price}</div>
-          </div>
-          <div class="tire-model">${brand}</div>
-          <div class="tire-condition">${cond}</div>
-          <div class="fitment-info"><strong>Fits:</strong> ${fits} ${notes ? '• ' + notes : ''}</div>
-        `;
-        container.appendChild(card);
-      });
-    }
-
-    async function refreshDashboard() {
-      const queueData = await fetchSheetJSONP('BayQueue');
-      const stockData = await fetchSheetJSONP('SetsForSale');
-
-      if (queueData) renderQueue(queueData);
-      if (stockData) renderInventory(stockData);
-    }
-
-    // Initial load + refresh every 30 seconds
-    refreshDashboard();
-    setInterval(refreshDashboard, 30000);
-  </script>
-</body>
-</html>
+          <td>
