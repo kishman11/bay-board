@@ -238,7 +238,8 @@
           reject('Network error loading ' + tabName);
         };
 
-        script.src = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?sheet=${encodeURIComponent(tabName)}&tqx=responseHandler:' + callbackName;
+        // Concatenation fix: ensures tabName encodes directly into query string
+        script.src = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?sheet=' + encodeURIComponent(tabName) + '&tqx=responseHandler:' + callbackName;
         document.body.appendChild(script);
       });
     }
@@ -251,7 +252,7 @@
       const filtered = rows.filter(r => r.length > 0 && r.some(c => c && c.trim() !== ''));
       if (filtered.length === 0) {
         document.getElementById('queueCount').textContent = '0 Jobs';
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No appointments queued</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No appointments queued in BayQueue</td></tr>';
         return;
       }
 
@@ -273,9 +274,9 @@
         todayList = filtered;
       }
 
-      document.getElementById('queueCount').textContent = `${todayList.length} Today • ${tomorrowList.length} Tmrw`;
+      document.getElementById('queueCount').textContent = todayList.length + ' Today • ' + tomorrowList.length + ' Tmrw';
 
-      function appendJobRows(list, isTomorrow = false) {
+      function appendJobRows(list, isTomorrow) {
         list.forEach(r => {
           const time    = (hasDayCol ? r[1] : r[0]) || '--';
           const cust    = (hasDayCol ? r[2] : r[1]) || '';
@@ -290,17 +291,15 @@
           let locBadge = '<span class="storage-none">Not Stored</span>';
           if (loc && loc.trim() !== '' && loc.toLowerCase() !== 'none' && loc !== '?') {
             locBadge = isTomorrow 
-              ? `<span class="storage-prepull">PULL: ${loc}</span>` 
-              : `<span class="storage-tag">${loc}</span>`;
+              ? '<span class="storage-prepull">PULL: ' + loc + '</span>' 
+              : '<span class="storage-tag">' + loc + '</span>';
           }
 
-          tr.innerHTML = `
-            <td class="time-col">${time}</td>
-            <td class="vehicle-col">${veh}<small>${cust}</small></td>
-            <td><span class="service-badge">${service}</span></td>
-            <td>${locBadge}</td>
-            <td class="notes-text">${notes}</td>
-          `;
+          tr.innerHTML = '<td class="time-col">' + time + '</td>' +
+                         '<td class="vehicle-col">' + veh + '<small>' + cust + '</small></td>' +
+                         '<td><span class="service-badge">' + service + '</span></td>' +
+                         '<td>' + locBadge + '</td>' +
+                         '<td class="notes-text">' + notes + '</td>';
           tbody.appendChild(tr);
         });
       }
@@ -308,7 +307,7 @@
       if (todayList.length > 0) {
         const headerTr = document.createElement('tr');
         headerTr.className = 'day-divider-row';
-        headerTr.innerHTML = `<td colspan="5" class="day-today">⚡ TODAY'S APPOINTMENTS (${todayList.length})</td>`;
+        headerTr.innerHTML = '<td colspan="5" class="day-today">⚡ TODAY\'S APPOINTMENTS (' + todayList.length + ')</td>';
         tbody.appendChild(headerTr);
         appendJobRows(todayList, false);
       }
@@ -316,7 +315,7 @@
       if (tomorrowList.length > 0) {
         const headerTr = document.createElement('tr');
         headerTr.className = 'day-divider-row';
-        headerTr.innerHTML = `<td colspan="5" class="day-tomorrow">📦 TOMORROW'S QUEUE & PRE-PULLS (${tomorrowList.length})</td>`;
+        headerTr.innerHTML = '<td colspan="5" class="day-tomorrow">📦 TOMORROW\'S QUEUE & PRE-PULLS (' + tomorrowList.length + ')</td>';
         tbody.appendChild(headerTr);
         appendJobRows(tomorrowList, true);
       }
@@ -364,7 +363,7 @@
       });
     }
 
-    // Rock-Solid Bidirectional Scroller (Bypasses Sticky Layout Recalculations)
+    // Bi-Directional Auto-Scroller
     function setupAutoScroller(containerId, speed = 0.5) {
       const container = document.getElementById(containerId);
       if (!container) return;
@@ -376,30 +375,24 @@
       function step() {
         const now = Date.now();
         if (now > pauseUntil) {
-          // Use container's true native scroll metrics
           const maxScroll = container.scrollHeight - container.clientHeight;
 
           if (maxScroll > 15) {
             currentPos += speed * direction;
+            if (currentPos > maxScroll) currentPos = maxScroll;
+            if (currentPos < 0) currentPos = 0;
+
             container.scrollTop = currentPos;
 
-            // 1. Bottom Detection: Either calculated limit OR physical scroll ceiling
-            if (direction === 1) {
-              if (currentPos >= maxScroll || container.scrollTop >= maxScroll - 2) {
-                currentPos = maxScroll;
-                container.scrollTop = maxScroll;
-                direction = -1;
-                pauseUntil = now + 4000; // Pause 4 seconds at the bottom
-              }
+            // Reached bottom
+            if (direction === 1 && currentPos >= maxScroll) {
+              direction = -1;
+              pauseUntil = now + 4000; // Pause 4s at bottom
             } 
-            // 2. Top Detection: Hit zero OR physical scroll ceiling
-            else if (direction === -1) {
-              if (currentPos <= 0 || container.scrollTop <= 1) {
-                currentPos = 0;
-                container.scrollTop = 0;
-                direction = 1;
-                pauseUntil = now + 4000; // Pause 4 seconds at the top
-              }
+            // Reached top
+            else if (direction === -1 && currentPos <= 0) {
+              direction = 1;
+              pauseUntil = now + 4000; // Pause 4s at top
             }
           } else {
             container.scrollTop = 0;
@@ -412,29 +405,46 @@
       requestAnimationFrame(step);
     }
 
+    // Independent tab fetching protects against cascading failures
     async function refreshDashboard() {
+      let queueCount = 0;
+      let stockCount = 0;
+      let hasError = false;
+
       try {
-        const [queueRows, stockRows] = await Promise.all([
-          fetchSheetJSONP('BayQueue'),
-          fetchSheetJSONP('SetsForSale')
-        ]);
-
-        renderQueue(queueRows);
-        renderInventory(stockRows);
-
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        setStatus(true, 'Synced (' + queueRows.length + ' Jobs, ' + stockRows.length + ' Items) @ ' + timeStr);
+        const queueRows = await fetchSheetJSONP('BayQueue');
+        if (queueRows) {
+          renderQueue(queueRows);
+          queueCount = queueRows.length;
+        }
       } catch (err) {
         console.error(err);
-        setStatus(false, err.toString());
+        hasError = true;
+        setStatus(false, 'BayQueue error: ' + err);
+      }
+
+      try {
+        const stockRows = await fetchSheetJSONP('SetsForSale');
+        if (stockRows) {
+          renderInventory(stockRows);
+          stockCount = stockRows.length;
+        }
+      } catch (err) {
+        console.error(err);
+        hasError = true;
+        setStatus(false, 'SetsForSale error: ' + err);
+      }
+
+      if (!hasError) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setStatus(true, 'Synced (' + queueCount + ' Jobs, ' + stockCount + ' Items) @ ' + timeStr);
       }
     }
 
     refreshDashboard();
     setInterval(refreshDashboard, 30000);
 
-    // Initialize scrolling for both sides
     setupAutoScroller('queueScrollBox', 0.5);
     setupAutoScroller('stockScrollBox', 0.6);
   </script>
